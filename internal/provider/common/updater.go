@@ -6,6 +6,7 @@ import (
 	"net/netip"
 
 	"github.com/qdm12/gluetun/internal/models"
+	"github.com/qdm12/gluetun/internal/publicip/ipinfo"
 	"github.com/qdm12/gluetun/internal/updater/resolver"
 )
 
@@ -33,5 +34,5 @@ type Warner interface {
 }
 
 type IPFetcher interface {
-	FetchInfo(ctx context.Context, ip netip.Addr) (result models.PublicIP, err error)
+	FetchMultiInfo(ctx context.Context, ips []netip.Addr) (data []ipinfo.Response, err error)
 }

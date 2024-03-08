@@ -10,7 +10,7 @@ import (
 
 	"github.com/qdm12/gluetun/internal/configuration/settings"
 	"github.com/qdm12/gluetun/internal/models"
-	"github.com/qdm12/gluetun/internal/publicip/api"
+	"github.com/qdm12/gluetun/internal/publicip/ipinfo"
 )
 
 type Loop struct {
@@ -103,7 +103,7 @@ func (l *Loop) run(runCtx context.Context, runDone chan<- struct{},
 		lastFetch = l.timeNow()
 		timerIsReadyToReset = l.updateTimer(*l.settings.Period, lastFetch, timer, timerIsReadyToReset)
 
-		if errors.Is(err, api.ErrTooManyRequests) {
+		if errors.Is(err, ipinfo.ErrTooManyRequests) {
 			continue
 		}
 
@@ -112,7 +112,7 @@ func (l *Loop) run(runCtx context.Context, runDone chan<- struct{},
 		l.logger.Info(message)
 
 		l.ipDataMutex.Lock()
-		l.ipData = result
+		l.ipData = result.ToPublicIPModel()
 		l.ipDataMutex.Unlock()
 
 		filepath := *l.settings.IPFilepath
@@ -123,7 +123,7 @@ func (l *Loop) run(runCtx context.Context, runDone chan<- struct{},
 	}
 }
 
-func (l *Loop) fetchIPData(ctx context.Context) (result models.PublicIP, err error) {
+func (l *Loop) fetchIPData(ctx context.Context) (result ipinfo.Response, err error) {
 	// keep retrying since settings updates won't change the
 	// behavior of the following code.
 	const defaultBackoffTime = 5 * time.Second
@@ -135,7 +135,7 @@ func (l *Loop) fetchIPData(ctx context.Context) (result models.PublicIP, err err
 			return result, nil
 		case ctx.Err() != nil:
 			return result, err
-		case errors.Is(err, api.ErrTooManyRequests):
+		case errors.Is(err, ipinfo.ErrTooManyRequests):
 			l.logger.Warn(err.Error() + "; not retrying.")
 			return result, err
 		}

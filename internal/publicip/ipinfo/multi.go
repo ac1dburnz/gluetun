@@ -1,10 +1,8 @@
-package api
+package ipinfo
 
 import (
 	"context"
 	"net/netip"
-
-	"github.com/qdm12/gluetun/internal/models"
 )
 
 // FetchMultiInfo obtains the public IP address information for every IP
@@ -13,13 +11,13 @@ import (
 // If an error is encountered, all the operations are canceled and
 // an error is returned, so the results returned should be considered
 // incomplete in this case.
-func FetchMultiInfo(ctx context.Context, fetcher Fetcher, ips []netip.Addr) (
-	results []models.PublicIP, err error) {
+func (f *Fetch) FetchMultiInfo(ctx context.Context, ips []netip.Addr) (
+	results []Response, err error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	type asyncResult struct {
 		index  int
-		result models.PublicIP
+		result Response
 		err    error
 	}
 	resultsCh := make(chan asyncResult)
@@ -29,12 +27,12 @@ func FetchMultiInfo(ctx context.Context, fetcher Fetcher, ips []netip.Addr) (
 			aResult := asyncResult{
 				index: index,
 			}
-			aResult.result, aResult.err = fetcher.FetchInfo(ctx, ip)
+			aResult.result, aResult.err = f.FetchInfo(ctx, ip)
 			resultsCh <- aResult
 		}(i, ip)
 	}
 
-	results = make([]models.PublicIP, len(ips))
+	results = make([]Response, len(ips))
 	for i := 0; i < len(ips); i++ {
 		aResult := <-resultsCh
 		if aResult.err != nil {

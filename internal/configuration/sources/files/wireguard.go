@@ -1,115 +1,124 @@
 package files
 
 import (
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
+	"net/netip"
 	"regexp"
 	"strings"
 
+	"github.com/qdm12/gluetun/internal/configuration/settings"
+	"golang.zx2c4.com/wireguard/wgctrl/wgtypes"
 	"gopkg.in/ini.v1"
 )
 
-func (s *Source) lazyLoadWireguardConf() WireguardConfig {
-	if s.cached.wireguardLoaded {
-		return s.cached.wireguardConf
-	}
-
-	s.cached.wireguardLoaded = true
-	var err error
-	s.cached.wireguardConf, err = ParseWireguardConf(filepath.Join(s.rootDirectory, "wg0.conf"))
+func (s *Source) readWireguard() (wireguard settings.Wireguard, err error) {
+	fileStringPtr, err := ReadFromFile(s.wireguardConfigPath)
 	if err != nil {
-		s.warner.Warnf("skipping Wireguard config: %s", err)
+		return wireguard, fmt.Errorf("reading file: %w", err)
 	}
-	return s.cached.wireguardConf
-}
 
-type WireguardConfig struct {
-	PrivateKey   *string
-	PreSharedKey *string
-	Addresses    *string
-	PublicKey    *string
-	EndpointIP   *string
-	EndpointPort *string
+	if fileStringPtr == nil {
+		return wireguard, nil
+	}
+
+	rawData := []byte(*fileStringPtr)
+	return ParseWireguardConf(rawData)
 }
 
 var (
 	regexINISectionNotExist = regexp.MustCompile(`^section ".+" does not exist$`)
+	regexINIKeyNotExist     = regexp.MustCompile(`key ".*" not exists$`)
 )
 
-func ParseWireguardConf(path string) (config WireguardConfig, err error) {
-	iniFile, err := ini.Load(path)
+func ParseWireguardConf(rawData []byte) (wireguard settings.Wireguard, err error) {
+	iniFile, err := ini.Load(rawData)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return WireguardConfig{}, nil
-		}
-		return WireguardConfig{}, fmt.Errorf("loading ini from reader: %w", err)
+		return wireguard, fmt.Errorf("loading ini from reader: %w", err)
 	}
 
 	interfaceSection, err := iniFile.GetSection("Interface")
 	if err == nil {
-		config.PrivateKey, config.Addresses = parseWireguardInterfaceSection(interfaceSection)
+		err = parseWireguardInterfaceSection(interfaceSection, &wireguard)
+		if err != nil {
+			return wireguard, fmt.Errorf("parsing interface section: %w", err)
+		}
 	} else if !regexINISectionNotExist.MatchString(err.Error()) {
 		// can never happen
-		return WireguardConfig{}, fmt.Errorf("getting interface section: %w", err)
+		return wireguard, fmt.Errorf("getting interface section: %w", err)
 	}
 
 	peerSection, err := iniFile.GetSection("Peer")
 	if err == nil {
-		config.PreSharedKey, config.PublicKey, config.EndpointIP,
-			config.EndpointPort = parseWireguardPeerSection(peerSection)
+		wireguard.PreSharedKey, err = parseINIWireguardKey(peerSection, "PresharedKey")
+		if err != nil {
+			return wireguard, fmt.Errorf("parsing peer section: %w", err)
+		}
 	} else if !regexINISectionNotExist.MatchString(err.Error()) {
 		// can never happen
-		return WireguardConfig{}, fmt.Errorf("getting peer section: %w", err)
+		return wireguard, fmt.Errorf("getting peer section: %w", err)
 	}
 
-	return config, nil
+	return wireguard, nil
 }
 
-func parseWireguardInterfaceSection(interfaceSection *ini.Section) (
-	privateKey, addresses *string) {
-	privateKey = getINIKeyFromSection(interfaceSection, "PrivateKey")
-	addresses = getINIKeyFromSection(interfaceSection, "Address")
-	return privateKey, addresses
-}
-
-var (
-	ErrEndpointHostNotIP = errors.New("endpoint host is not an IP")
-)
-
-func parseWireguardPeerSection(peerSection *ini.Section) (
-	preSharedKey, publicKey, endpointIP, endpointPort *string) {
-	preSharedKey = getINIKeyFromSection(peerSection, "PresharedKey")
-	publicKey = getINIKeyFromSection(peerSection, "PublicKey")
-	endpoint := getINIKeyFromSection(peerSection, "Endpoint")
-	if endpoint != nil {
-		parts := strings.Split(*endpoint, ":")
-		endpointIP = &parts[0]
-		const partsWithPort = 2
-		if len(parts) >= partsWithPort {
-			endpointPort = new(string)
-			*endpointPort = strings.Join(parts[1:], ":")
-		}
+func parseWireguardInterfaceSection(interfaceSection *ini.Section,
+	wireguard *settings.Wireguard) (err error) {
+	wireguard.PrivateKey, err = parseINIWireguardKey(interfaceSection, "PrivateKey")
+	if err != nil {
+		return err // error is already wrapped correctly
 	}
 
-	return preSharedKey, publicKey, endpointIP, endpointPort
+	wireguard.Addresses, err = parseINIWireguardAddress(interfaceSection)
+	if err != nil {
+		return err // error is already wrapped correctly
+	}
+
+	return nil
 }
 
-var (
-	regexINIKeyNotExist = regexp.MustCompile(`key ".*" not exists$`)
-)
-
-func getINIKeyFromSection(section *ini.Section, key string) (value *string) {
-	iniKey, err := section.GetKey(key)
+func parseINIWireguardKey(section *ini.Section, keyName string) (
+	key *string, err error) {
+	iniKey, err := section.GetKey(keyName)
 	if err != nil {
 		if regexINIKeyNotExist.MatchString(err.Error()) {
-			return nil
+			return nil, nil //nolint:nilnil
 		}
 		// can never happen
-		panic(fmt.Sprintf("getting key %q: %s", key, err))
+		return nil, fmt.Errorf("getting %s key: %w", keyName, err)
 	}
-	value = new(string)
-	*value = iniKey.String()
-	return value
+
+	key = new(string)
+	*key = iniKey.String()
+	_, err = wgtypes.ParseKey(*key)
+	if err != nil {
+		return nil, fmt.Errorf("parsing %s: %s: %w", keyName, *key, err)
+	}
+	return key, nil
+}
+
+func parseINIWireguardAddress(section *ini.Section) (
+	addresses []netip.Prefix, err error) {
+	addressKey, err := section.GetKey("Address")
+	if err != nil {
+		if regexINIKeyNotExist.MatchString(err.Error()) {
+			return nil, nil
+		}
+		// can never happen
+		return nil, fmt.Errorf("getting Address key: %w", err)
+	}
+
+	addressStrings := strings.Split(addressKey.String(), ",")
+	addresses = make([]netip.Prefix, len(addressStrings))
+	for i, addressString := range addressStrings {
+		addressString = strings.TrimSpace(addressString)
+		if !strings.ContainsRune(addressString, '/') {
+			addressString += "/32"
+		}
+		addresses[i], err = netip.ParsePrefix(addressString)
+		if err != nil {
+			return nil, fmt.Errorf("parsing address: %w", err)
+		}
+	}
+
+	return addresses, nil
 }

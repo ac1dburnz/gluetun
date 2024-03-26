@@ -6,9 +6,8 @@ import (
 	"time"
 
 	"github.com/qdm12/gosettings"
-	"github.com/qdm12/gosettings/reader"
-	"github.com/qdm12/gosettings/validate"
 	"github.com/qdm12/gotree"
+	"github.com/qdm12/govalid/address"
 )
 
 // Health contains settings for the healthcheck and health server.
@@ -37,7 +36,9 @@ type Health struct {
 }
 
 func (h Health) Validate() (err error) {
-	err = validate.ListeningAddress(h.ServerAddress, os.Getuid())
+	uid := os.Getuid()
+	err = address.Validate(h.ServerAddress,
+		address.OptionListening(uid))
 	if err != nil {
 		return fmt.Errorf("server listening address is not valid: %w", err)
 	}
@@ -61,27 +62,38 @@ func (h *Health) copy() (copied Health) {
 	}
 }
 
+// MergeWith merges the other settings into any
+// unset field of the receiver settings object.
+func (h *Health) MergeWith(other Health) {
+	h.ServerAddress = gosettings.MergeWithString(h.ServerAddress, other.ServerAddress)
+	h.ReadHeaderTimeout = gosettings.MergeWithNumber(h.ReadHeaderTimeout, other.ReadHeaderTimeout)
+	h.ReadTimeout = gosettings.MergeWithNumber(h.ReadTimeout, other.ReadTimeout)
+	h.TargetAddress = gosettings.MergeWithString(h.TargetAddress, other.TargetAddress)
+	h.SuccessWait = gosettings.MergeWithNumber(h.SuccessWait, other.SuccessWait)
+	h.VPN.mergeWith(other.VPN)
+}
+
 // OverrideWith overrides fields of the receiver
 // settings object with any field set in the other
 // settings.
 func (h *Health) OverrideWith(other Health) {
-	h.ServerAddress = gosettings.OverrideWithComparable(h.ServerAddress, other.ServerAddress)
-	h.ReadHeaderTimeout = gosettings.OverrideWithComparable(h.ReadHeaderTimeout, other.ReadHeaderTimeout)
-	h.ReadTimeout = gosettings.OverrideWithComparable(h.ReadTimeout, other.ReadTimeout)
-	h.TargetAddress = gosettings.OverrideWithComparable(h.TargetAddress, other.TargetAddress)
-	h.SuccessWait = gosettings.OverrideWithComparable(h.SuccessWait, other.SuccessWait)
+	h.ServerAddress = gosettings.OverrideWithString(h.ServerAddress, other.ServerAddress)
+	h.ReadHeaderTimeout = gosettings.OverrideWithNumber(h.ReadHeaderTimeout, other.ReadHeaderTimeout)
+	h.ReadTimeout = gosettings.OverrideWithNumber(h.ReadTimeout, other.ReadTimeout)
+	h.TargetAddress = gosettings.OverrideWithString(h.TargetAddress, other.TargetAddress)
+	h.SuccessWait = gosettings.OverrideWithNumber(h.SuccessWait, other.SuccessWait)
 	h.VPN.overrideWith(other.VPN)
 }
 
 func (h *Health) SetDefaults() {
-	h.ServerAddress = gosettings.DefaultComparable(h.ServerAddress, "127.0.0.1:9999")
+	h.ServerAddress = gosettings.DefaultString(h.ServerAddress, "127.0.0.1:9999")
 	const defaultReadHeaderTimeout = 100 * time.Millisecond
-	h.ReadHeaderTimeout = gosettings.DefaultComparable(h.ReadHeaderTimeout, defaultReadHeaderTimeout)
+	h.ReadHeaderTimeout = gosettings.DefaultNumber(h.ReadHeaderTimeout, defaultReadHeaderTimeout)
 	const defaultReadTimeout = 500 * time.Millisecond
-	h.ReadTimeout = gosettings.DefaultComparable(h.ReadTimeout, defaultReadTimeout)
-	h.TargetAddress = gosettings.DefaultComparable(h.TargetAddress, "cloudflare.com:443")
+	h.ReadTimeout = gosettings.DefaultNumber(h.ReadTimeout, defaultReadTimeout)
+	h.TargetAddress = gosettings.DefaultString(h.TargetAddress, "cloudflare.com:443")
 	const defaultSuccessWait = 5 * time.Second
-	h.SuccessWait = gosettings.DefaultComparable(h.SuccessWait, defaultSuccessWait)
+	h.SuccessWait = gosettings.DefaultNumber(h.SuccessWait, defaultSuccessWait)
 	h.VPN.setDefaults()
 }
 
@@ -98,22 +110,4 @@ func (h Health) toLinesNode() (node *gotree.Node) {
 	node.Appendf("Read timeout: %s", h.ReadTimeout)
 	node.AppendNode(h.VPN.toLinesNode("VPN"))
 	return node
-}
-
-func (h *Health) Read(r *reader.Reader) (err error) {
-	h.ServerAddress = r.String("HEALTH_SERVER_ADDRESS")
-	h.TargetAddress = r.String("HEALTH_TARGET_ADDRESS",
-		reader.RetroKeys("HEALTH_ADDRESS_TO_PING"))
-
-	h.SuccessWait, err = r.Duration("HEALTH_SUCCESS_WAIT_DURATION")
-	if err != nil {
-		return err
-	}
-
-	err = h.VPN.read(r)
-	if err != nil {
-		return fmt.Errorf("VPN health settings: %w", err)
-	}
-
-	return nil
 }

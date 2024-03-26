@@ -23,6 +23,7 @@ func Test_Provider_GetConnection(t *testing.T) {
 	const provider = providers.Ivpn
 
 	errTest := errors.New("test error")
+	boolPtr := func(b bool) *bool { return &b }
 
 	testCases := map[string]struct {
 		filteredServers []models.Server
@@ -44,7 +45,7 @@ func Test_Provider_GetConnection(t *testing.T) {
 			},
 			selection: settings.ServerSelection{
 				OpenVPN: settings.OpenVPNSelection{
-					Protocol: constants.TCP,
+					TCP: boolPtr(true),
 				},
 			}.WithDefaults(provider),
 			connection: models.Connection{
@@ -60,7 +61,7 @@ func Test_Provider_GetConnection(t *testing.T) {
 			},
 			selection: settings.ServerSelection{
 				OpenVPN: settings.OpenVPNSelection{
-					Protocol: constants.UDP,
+					TCP: boolPtr(false),
 				},
 			}.WithDefaults(provider),
 			connection: models.Connection{

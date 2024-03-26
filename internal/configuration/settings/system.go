@@ -2,7 +2,6 @@ package settings
 
 import (
 	"github.com/qdm12/gosettings"
-	"github.com/qdm12/gosettings/reader"
 	"github.com/qdm12/gotree"
 )
 
@@ -26,10 +25,16 @@ func (s *System) copy() (copied System) {
 	}
 }
 
+func (s *System) mergeWith(other System) {
+	s.PUID = gosettings.MergeWithPointer(s.PUID, other.PUID)
+	s.PGID = gosettings.MergeWithPointer(s.PGID, other.PGID)
+	s.Timezone = gosettings.MergeWithString(s.Timezone, other.Timezone)
+}
+
 func (s *System) overrideWith(other System) {
 	s.PUID = gosettings.OverrideWithPointer(s.PUID, other.PUID)
 	s.PGID = gosettings.OverrideWithPointer(s.PGID, other.PGID)
-	s.Timezone = gosettings.OverrideWithComparable(s.Timezone, other.Timezone)
+	s.Timezone = gosettings.OverrideWithString(s.Timezone, other.Timezone)
 }
 
 func (s *System) setDefaults() {
@@ -53,19 +58,4 @@ func (s System) toLinesNode() (node *gotree.Node) {
 	}
 
 	return node
-}
-
-func (s *System) read(r *reader.Reader) (err error) {
-	s.PUID, err = r.Uint32Ptr("PUID", reader.RetroKeys("UID"))
-	if err != nil {
-		return err
-	}
-
-	s.PGID, err = r.Uint32Ptr("PGID", reader.RetroKeys("GID"))
-	if err != nil {
-		return err
-	}
-
-	s.Timezone = r.String("TZ")
-	return nil
 }

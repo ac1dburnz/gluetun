@@ -7,7 +7,6 @@ import (
 
 	"github.com/qdm12/gluetun/internal/publicip/api"
 	"github.com/qdm12/gosettings"
-	"github.com/qdm12/gosettings/reader"
 	"github.com/qdm12/gotree"
 )
 
@@ -78,10 +77,17 @@ func (p *PublicIP) copy() (copied PublicIP) {
 	}
 }
 
+func (p *PublicIP) mergeWith(other PublicIP) {
+	p.Period = gosettings.MergeWithPointer(p.Period, other.Period)
+	p.IPFilepath = gosettings.MergeWithPointer(p.IPFilepath, other.IPFilepath)
+	p.API = gosettings.MergeWithString(p.API, other.API)
+	p.APIToken = gosettings.MergeWithPointer(p.APIToken, other.APIToken)
+}
+
 func (p *PublicIP) overrideWith(other PublicIP) {
 	p.Period = gosettings.OverrideWithPointer(p.Period, other.Period)
 	p.IPFilepath = gosettings.OverrideWithPointer(p.IPFilepath, other.IPFilepath)
-	p.API = gosettings.OverrideWithComparable(p.API, other.API)
+	p.API = gosettings.OverrideWithString(p.API, other.API)
 	p.APIToken = gosettings.OverrideWithPointer(p.APIToken, other.APIToken)
 }
 
@@ -89,7 +95,7 @@ func (p *PublicIP) setDefaults() {
 	const defaultPeriod = 12 * time.Hour
 	p.Period = gosettings.DefaultPointer(p.Period, defaultPeriod)
 	p.IPFilepath = gosettings.DefaultPointer(p.IPFilepath, "/tmp/gluetun/ip")
-	p.API = gosettings.DefaultComparable(p.API, "ipinfo")
+	p.API = gosettings.DefaultString(p.API, "ipinfo")
 	p.APIToken = gosettings.DefaultPointer(p.APIToken, "")
 }
 
@@ -122,17 +128,4 @@ func (p PublicIP) toLinesNode() (node *gotree.Node) {
 	}
 
 	return node
-}
-
-func (p *PublicIP) read(r *reader.Reader) (err error) {
-	p.Period, err = r.DurationPtr("PUBLICIP_PERIOD")
-	if err != nil {
-		return err
-	}
-
-	p.IPFilepath = r.Get("PUBLICIP_FILE",
-		reader.ForceLowercase(false), reader.RetroKeys("IP_STATUS_FILE"))
-	p.API = r.String("PUBLICIP_API")
-	p.APIToken = r.Get("PUBLICIP_API_TOKEN")
-	return nil
 }

@@ -23,7 +23,7 @@ func Test_getProtocol(t *testing.T) {
 			selection: settings.ServerSelection{
 				VPN: vpn.OpenVPN,
 				OpenVPN: settings.OpenVPNSelection{
-					Protocol: constants.UDP,
+					TCP: boolPtr(false),
 				},
 			},
 			protocol: constants.UDP,
@@ -32,7 +32,7 @@ func Test_getProtocol(t *testing.T) {
 			selection: settings.ServerSelection{
 				VPN: vpn.OpenVPN,
 				OpenVPN: settings.OpenVPNSelection{
-					Protocol: constants.TCP,
+					TCP: boolPtr(true),
 				},
 			},
 			protocol: constants.TCP,
@@ -84,7 +84,7 @@ func Test_filterByProtocol(t *testing.T) {
 			selection: settings.ServerSelection{
 				VPN: vpn.OpenVPN,
 				OpenVPN: settings.OpenVPNSelection{
-					Protocol: constants.UDP,
+					TCP: boolPtr(false),
 				},
 			},
 			serverUDP: true,
@@ -94,7 +94,7 @@ func Test_filterByProtocol(t *testing.T) {
 			selection: settings.ServerSelection{
 				VPN: vpn.OpenVPN,
 				OpenVPN: settings.OpenVPNSelection{
-					Protocol: constants.UDP,
+					TCP: boolPtr(false),
 				},
 			},
 			serverUDP: false,
@@ -104,7 +104,7 @@ func Test_filterByProtocol(t *testing.T) {
 			selection: settings.ServerSelection{
 				VPN: vpn.OpenVPN,
 				OpenVPN: settings.OpenVPNSelection{
-					Protocol: constants.TCP,
+					TCP: boolPtr(true),
 				},
 			},
 			serverTCP: true,
@@ -114,7 +114,7 @@ func Test_filterByProtocol(t *testing.T) {
 			selection: settings.ServerSelection{
 				VPN: vpn.OpenVPN,
 				OpenVPN: settings.OpenVPNSelection{
-					Protocol: constants.TCP,
+					TCP: boolPtr(true),
 				},
 			},
 			serverTCP: false,

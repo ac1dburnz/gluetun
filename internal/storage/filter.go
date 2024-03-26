@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/qdm12/gluetun/internal/configuration/settings"
-	"github.com/qdm12/gluetun/internal/constants"
 	"github.com/qdm12/gluetun/internal/constants/providers"
 	"github.com/qdm12/gluetun/internal/constants/vpn"
 	"github.com/qdm12/gluetun/internal/models"
@@ -148,7 +147,7 @@ func filterByProtocol(selection settings.ServerSelection,
 	case vpn.Wireguard:
 		return !serverUDP
 	default: // OpenVPN
-		wantTCP := selection.OpenVPN.Protocol == constants.TCP
+		wantTCP := *selection.OpenVPN.TCP
 		wantUDP := !wantTCP
 		return (wantTCP && !serverTCP) || (wantUDP && !serverUDP)
 	}

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/qdm12/gluetun/internal/httpserver"
-	"github.com/qdm12/gosettings/validate"
+	"github.com/qdm12/govalid/address"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -104,6 +104,65 @@ func Test_Settings_Copy(t *testing.T) {
 			copied := testCase.initial.Copy()
 
 			assert.Equal(t, testCase.expected, copied)
+		})
+	}
+}
+
+func Test_Settings_MergeWith(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		settings Settings
+		other    Settings
+		expected Settings
+	}{
+		"merge empty with empty": {},
+		"merge empty with filled": {
+			other: Settings{
+				Enabled:          boolPtr(true),
+				BlockProfileRate: intPtr(1),
+				MutexProfileRate: intPtr(1),
+				HTTPServer: httpserver.Settings{
+					Address: ":8001",
+				},
+			},
+			expected: Settings{
+				Enabled:          boolPtr(true),
+				BlockProfileRate: intPtr(1),
+				MutexProfileRate: intPtr(1),
+				HTTPServer: httpserver.Settings{
+					Address: ":8001",
+				},
+			},
+		},
+		"merge filled with empty": {
+			settings: Settings{
+				Enabled:          boolPtr(true),
+				BlockProfileRate: intPtr(1),
+				MutexProfileRate: intPtr(1),
+				HTTPServer: httpserver.Settings{
+					Address: ":8001",
+				},
+			},
+			expected: Settings{
+				Enabled:          boolPtr(true),
+				BlockProfileRate: intPtr(1),
+				MutexProfileRate: intPtr(1),
+				HTTPServer: httpserver.Settings{
+					Address: ":8001",
+				},
+			},
+		},
+	}
+
+	for name, testCase := range testCases {
+		testCase := testCase
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			testCase.settings.MergeWith(testCase.other)
+
+			assert.Equal(t, testCase.expected, testCase.settings)
 		})
 	}
 }
@@ -221,12 +280,10 @@ func Test_Settings_Validate(t *testing.T) {
 			settings: Settings{
 				BlockProfileRate: intPtr(0),
 				MutexProfileRate: intPtr(0),
-				HTTPServer: httpserver.Settings{
-					Address: ":x",
-				},
+				HTTPServer:       httpserver.Settings{},
 			},
-			errWrapped: validate.ErrPortNotAnInteger,
-			errMessage: "port value is not an integer: x",
+			errWrapped: address.ErrValueNotValid,
+			errMessage: "value is not valid: missing port in address",
 		},
 		"valid settings": {
 			settings: Settings{
@@ -252,7 +309,7 @@ func Test_Settings_Validate(t *testing.T) {
 			err := testCase.settings.Validate()
 
 			assert.ErrorIs(t, err, testCase.errWrapped)
-			if testCase.errMessage != "" {
+			if err != nil {
 				assert.EqualError(t, err, testCase.errMessage)
 			}
 		})

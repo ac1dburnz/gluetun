@@ -2,7 +2,6 @@ package settings
 
 import (
 	"github.com/qdm12/gosettings"
-	"github.com/qdm12/gosettings/reader"
 	"github.com/qdm12/gotree"
 )
 
@@ -22,6 +21,12 @@ func (v *Version) copy() (copied Version) {
 	return Version{
 		Enabled: gosettings.CopyPointer(v.Enabled),
 	}
+}
+
+// mergeWith merges the other settings into any
+// unset field of the receiver settings object.
+func (v *Version) mergeWith(other Version) {
+	v.Enabled = gosettings.MergeWithPointer(v.Enabled, other.Enabled)
 }
 
 // overrideWith overrides fields of the receiver
@@ -45,13 +50,4 @@ func (v Version) toLinesNode() (node *gotree.Node) {
 	node.Appendf("Enabled: %s", gosettings.BoolToYesNo(v.Enabled))
 
 	return node
-}
-
-func (v *Version) read(r *reader.Reader) (err error) {
-	v.Enabled, err = r.BoolPtr("VERSION_INFORMATION")
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

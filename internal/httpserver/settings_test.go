@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qdm12/gosettings/validate"
+	"github.com/qdm12/govalid/address"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -94,6 +94,68 @@ func Test_Settings_Copy(t *testing.T) {
 			copied := testCase.settings.Copy()
 
 			assert.Equal(t, testCase.expected, copied)
+		})
+	}
+}
+
+func Test_Settings_MergeWith(t *testing.T) {
+	t.Parallel()
+
+	someHandler := http.NewServeMux()
+	someLogger := &testLogger{}
+
+	testCases := map[string]struct {
+		settings Settings
+		other    Settings
+		expected Settings
+	}{
+		"merge empty with empty": {},
+		"merge empty with filled": {
+			other: Settings{
+				Address:           ":8001",
+				Handler:           someHandler,
+				Logger:            someLogger,
+				ReadHeaderTimeout: time.Second,
+				ReadTimeout:       time.Second,
+				ShutdownTimeout:   time.Second,
+			},
+			expected: Settings{
+				Address:           ":8001",
+				Handler:           someHandler,
+				Logger:            someLogger,
+				ReadHeaderTimeout: time.Second,
+				ReadTimeout:       time.Second,
+				ShutdownTimeout:   time.Second,
+			},
+		},
+		"merge filled with empty": {
+			settings: Settings{
+				Address:           ":8001",
+				Handler:           someHandler,
+				Logger:            someLogger,
+				ReadHeaderTimeout: time.Second,
+				ReadTimeout:       time.Second,
+				ShutdownTimeout:   time.Second,
+			},
+			expected: Settings{
+				Address:           ":8001",
+				Handler:           someHandler,
+				Logger:            someLogger,
+				ReadHeaderTimeout: time.Second,
+				ReadTimeout:       time.Second,
+				ShutdownTimeout:   time.Second,
+			},
+		},
+	}
+
+	for name, testCase := range testCases {
+		testCase := testCase
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			testCase.settings.MergeWith(testCase.other)
+
+			assert.Equal(t, testCase.expected, testCase.settings)
 		})
 	}
 }
@@ -195,12 +257,12 @@ func Test_Settings_Validate(t *testing.T) {
 		errWrapped error
 		errMessage string
 	}{
-		"bad_address": {
+		"bad address": {
 			settings: Settings{
-				Address: "address:notanint",
+				Address: "noport",
 			},
-			errWrapped: validate.ErrPortNotAnInteger,
-			errMessage: "port value is not an integer: notanint",
+			errWrapped: address.ErrValueNotValid,
+			errMessage: "value is not valid: address noport: missing port in address",
 		},
 		"nil handler": {
 			settings: Settings{
@@ -270,7 +332,7 @@ func Test_Settings_Validate(t *testing.T) {
 			err := testCase.settings.Validate()
 
 			assert.ErrorIs(t, err, testCase.errWrapped)
-			if testCase.errMessage != "" {
+			if err != nil {
 				assert.EqualError(t, err, testCase.errMessage)
 			}
 		})

@@ -1,104 +1,46 @@
 package secrets
 
 import (
+	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
-	"github.com/qdm12/gluetun/internal/configuration/sources/files"
+	"github.com/qdm12/gluetun/internal/configuration/settings"
+	"github.com/qdm12/gosettings/sources/env"
 )
 
 type Source struct {
-	rootDirectory string
-	environ       map[string]string
-	warner        Warner
-	cached        struct {
-		wireguardLoaded bool
-		wireguardConf   files.WireguardConfig
-	}
+	env env.Env
 }
 
-func New(warner Warner) (source *Source) {
-	const rootDirectory = "/run/secrets"
-	osEnviron := os.Environ()
-	environ := make(map[string]string, len(osEnviron))
-	for _, pair := range osEnviron {
-		const maxSplit = 2
-		split := strings.SplitN(pair, "=", maxSplit)
-		environ[split[0]] = split[1]
-	}
-
+func New() *Source {
+	handleDeprecatedKey := (func(deprecatedKey, newKey string))(nil)
 	return &Source{
-		rootDirectory: rootDirectory,
-		environ:       environ,
-		warner:        warner,
+		env: *env.New(os.Environ(), handleDeprecatedKey),
 	}
 }
 
 func (s *Source) String() string { return "secret files" }
 
-func (s *Source) Get(key string) (value string, isSet bool) {
-	if key == "" {
-		return "", false
-	}
-	// TODO v4 custom environment variable to set the secrets parent directory
-	// and not to set each secret file to a specific path
-	envKey := strings.ToUpper(key)
-	envKey = strings.ReplaceAll(envKey, "-", "_")
-	envKey += "_SECRETFILE" // TODO v4 change _SECRETFILE to _FILE
-	path := s.environ[envKey]
-	if path == "" {
-		path = filepath.Join(s.rootDirectory, key)
-	}
-
-	// Special file parsing
-	switch key {
-	// TODO timezone from /etc/localtime
-	case "openvpn_clientcrt", "openvpn_clientkey":
-		value, isSet, err := files.ReadPEMFile(path)
-		if err != nil {
-			s.warner.Warnf("skipping %s: parsing PEM: %s", path, err)
-		}
-		return value, isSet
-	case "wireguard_private_key":
-		privateKey := s.lazyLoadWireguardConf().PrivateKey
-		if privateKey != nil {
-			return *privateKey, true
-		} // else continue to read from individual secret file
-	case "wireguard_preshared_key":
-		preSharedKey := s.lazyLoadWireguardConf().PreSharedKey
-		if preSharedKey != nil {
-			return *preSharedKey, true
-		} // else continue to read from individual secret file
-	case "wireguard_addresses":
-		addresses := s.lazyLoadWireguardConf().Addresses
-		if addresses != nil {
-			return *addresses, true
-		} // else continue to read from individual secret file
-	case "wireguard_public_key":
-		return strPtrToStringIsSet(s.lazyLoadWireguardConf().PublicKey)
-	case "vpn_endpoint_ip":
-		return strPtrToStringIsSet(s.lazyLoadWireguardConf().EndpointIP)
-	case "vpn_endpoint_port":
-		return strPtrToStringIsSet(s.lazyLoadWireguardConf().EndpointPort)
-	}
-
-	value, isSet, err := files.ReadFromFile(path)
+func (s *Source) Read() (settings settings.Settings, err error) {
+	settings.VPN, err = s.readVPN()
 	if err != nil {
-		s.warner.Warnf("skipping %s: reading file: %s", path, err)
+		return settings, err
 	}
-	return value, isSet
-}
 
-func (s *Source) KeyTransform(key string) string {
-	switch key {
-	// TODO v4 remove these irregular cases
-	case "OPENVPN_KEY":
-		return "openvpn_clientkey"
-	case "OPENVPN_CERT":
-		return "openvpn_clientcrt"
-	default:
-		key = strings.ToLower(key) // HTTPROXY_USER -> httpproxy_user
-		return key
+	settings.HTTPProxy, err = s.readHTTPProxy()
+	if err != nil {
+		return settings, err
 	}
+
+	settings.Shadowsocks, err = s.readShadowsocks()
+	if err != nil {
+		return settings, err
+	}
+
+	settings.VPN.Wireguard, err = s.readWireguard()
+	if err != nil {
+		return settings, fmt.Errorf("reading Wireguard: %w", err)
+	}
+
+	return settings, nil
 }

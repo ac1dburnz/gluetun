@@ -3,7 +3,6 @@ package settings
 import "errors"
 
 var (
-	ErrValueUnknown                    = errors.New("value is unknown")
 	ErrCityNotValid                    = errors.New("the city specified is not valid")
 	ErrControlServerPrivilegedPort     = errors.New("cannot use privileged port without running as root")
 	ErrCategoryNotValid                = errors.New("the category specified is not valid")

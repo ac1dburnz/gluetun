@@ -8,14 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qdm12/gluetun/internal/configuration/settings"
 	"github.com/qdm12/gluetun/internal/constants"
 	"github.com/qdm12/gluetun/internal/models"
 	"github.com/qdm12/gluetun/internal/openvpn/extract"
 	"github.com/qdm12/gluetun/internal/provider"
 	"github.com/qdm12/gluetun/internal/storage"
 	"github.com/qdm12/gluetun/internal/updater/resolver"
-	"github.com/qdm12/gosettings/reader"
 )
 
 type OpenvpnConfigLogger interface {
@@ -41,15 +39,14 @@ type IPv6Checker interface {
 	IsIPv6Supported() (supported bool, err error)
 }
 
-func (c *CLI) OpenvpnConfig(logger OpenvpnConfigLogger, reader *reader.Reader,
+func (c *CLI) OpenvpnConfig(logger OpenvpnConfigLogger, source Source,
 	ipv6Checker IPv6Checker) error {
 	storage, err := storage.New(logger, constants.ServersData)
 	if err != nil {
 		return err
 	}
 
-	var allSettings settings.Settings
-	err = allSettings.Read(reader)
+	allSettings, err := source.Read()
 	if err != nil {
 		return err
 	}
@@ -73,7 +70,7 @@ func (c *CLI) OpenvpnConfig(logger OpenvpnConfigLogger, reader *reader.Reader,
 
 	providers := provider.NewProviders(storage, time.Now, warner, client,
 		unzipper, parallelResolver, ipFetcher, openvpnFileExtractor)
-	providerConf := providers.Get(allSettings.VPN.Provider.Name)
+	providerConf := providers.Get(*allSettings.VPN.Provider.Name)
 	connection, err := providerConf.GetConnection(
 		allSettings.VPN.Provider.ServerSelection, ipv6Supported)
 	if err != nil {

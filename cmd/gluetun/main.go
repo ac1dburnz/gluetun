@@ -17,7 +17,9 @@ import (
 	"github.com/qdm12/gluetun/internal/alpine"
 	"github.com/qdm12/gluetun/internal/cli"
 	"github.com/qdm12/gluetun/internal/configuration/settings"
+	"github.com/qdm12/gluetun/internal/configuration/sources/env"
 	"github.com/qdm12/gluetun/internal/configuration/sources/files"
+	mux "github.com/qdm12/gluetun/internal/configuration/sources/merge"
 	"github.com/qdm12/gluetun/internal/configuration/sources/secrets"
 	"github.com/qdm12/gluetun/internal/constants"
 	"github.com/qdm12/gluetun/internal/dns"
@@ -43,8 +45,6 @@ import (
 	"github.com/qdm12/gluetun/internal/updater/unzip"
 	"github.com/qdm12/gluetun/internal/vpn"
 	"github.com/qdm12/golibs/command"
-	"github.com/qdm12/gosettings/reader"
-	"github.com/qdm12/gosettings/reader/sources/env"
 	"github.com/qdm12/goshutdown"
 	"github.com/qdm12/goshutdown/goroutine"
 	"github.com/qdm12/goshutdown/group"
@@ -82,21 +82,14 @@ func main() {
 	cli := cli.New()
 	cmder := command.NewCmder()
 
-	reader := reader.New(reader.Settings{
-		Sources: []reader.Source{
-			secrets.New(logger),
-			files.New(logger),
-			env.New(env.Settings{}),
-		},
-		HandleDeprecatedKey: func(source, deprecatedKey, currentKey string) {
-			logger.Warn("You are using the old " + source + " " + deprecatedKey +
-				", please consider changing it to " + currentKey)
-		},
-	})
+	secretsReader := secrets.New()
+	filesReader := files.New()
+	envReader := env.New(logger)
+	muxReader := mux.New(secretsReader, filesReader, envReader)
 
 	errorCh := make(chan error)
 	go func() {
-		errorCh <- _main(ctx, buildInfo, args, logger, reader, tun, netLinker, cmder, cli)
+		errorCh <- _main(ctx, buildInfo, args, logger, muxReader, tun, netLinker, cmder, cli)
 	}()
 
 	var err error
@@ -146,17 +139,17 @@ var (
 
 //nolint:gocognit,gocyclo,maintidx
 func _main(ctx context.Context, buildInfo models.BuildInformation,
-	args []string, logger log.LoggerInterface, reader *reader.Reader,
+	args []string, logger log.LoggerInterface, source Source,
 	tun Tun, netLinker netLinker, cmder command.RunStarter,
 	cli clier) error {
 	if len(args) > 1 { // cli operation
 		switch args[1] {
 		case "healthcheck":
-			return cli.HealthCheck(ctx, reader, logger)
+			return cli.HealthCheck(ctx, source, logger)
 		case "clientkey":
 			return cli.ClientKey(args[2:])
 		case "openvpnconfig":
-			return cli.OpenvpnConfig(logger, reader, netLinker)
+			return cli.OpenvpnConfig(logger, source, netLinker)
 		case "update":
 			return cli.Update(ctx, args[2:], logger)
 		case "format-servers":
@@ -187,22 +180,17 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
 		fmt.Println(line)
 	}
 
-	var allSettings settings.Settings
-	err = allSettings.Read(reader)
+	allSettings, err := source.Read()
 	if err != nil {
 		return err
 	}
-	allSettings.SetDefaults()
 
 	// Note: no need to validate minimal settings for the firewall:
-	// - global log level is parsed below
+	// - global log level is parsed from source
 	// - firewall Debug and Enabled are booleans parsed from source
-	logLevel, err := log.ParseLevel(allSettings.Log.Level)
-	if err != nil {
-		return fmt.Errorf("log level: %w", err)
-	}
-	logger.Patch(log.SetLevel(logLevel))
-	netLinker.PatchLoggerLevel(logLevel)
+
+	logger.Patch(log.SetLevel(*allSettings.Log.Level))
+	netLinker.PatchLoggerLevel(*allSettings.Log.Level)
 
 	routingLogger := logger.New(log.SetComponent("routing"))
 	if *allSettings.Firewall.Debug { // To remove in v4
@@ -590,12 +578,18 @@ type Linker interface {
 type clier interface {
 	ClientKey(args []string) error
 	FormatServers(args []string) error
-	OpenvpnConfig(logger cli.OpenvpnConfigLogger, reader *reader.Reader, ipv6Checker cli.IPv6Checker) error
-	HealthCheck(ctx context.Context, reader *reader.Reader, warner cli.Warner) error
+	OpenvpnConfig(logger cli.OpenvpnConfigLogger, source cli.Source, ipv6Checker cli.IPv6Checker) error
+	HealthCheck(ctx context.Context, source cli.Source, warner cli.Warner) error
 	Update(ctx context.Context, args []string, logger cli.UpdaterLogger) error
 }
 
 type Tun interface {
 	Check(tunDevice string) error
 	Create(tunDevice string) error
+}
+
+type Source interface {
+	Read() (settings settings.Settings, err error)
+	ReadHealth() (health settings.Health, err error)
+	String() string
 }

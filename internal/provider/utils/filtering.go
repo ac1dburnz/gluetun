@@ -53,7 +53,15 @@ func filterServer(server models.Server,
 		return true
 	}
 
+	if *selection.PortForwardOnly && !server.PortForward {
+		return true
+	}
+
 	if filterByPossibilities(server.Country, selection.Countries) {
+		return true
+	}
+
+	if filterAnyByPossibilities(server.Categories, selection.Categories) {
 		return true
 	}
 
@@ -95,5 +103,19 @@ func filterByPossibilities[T string | uint16](value T, possibilities []T) (filte
 			return false
 		}
 	}
+	return true
+}
+
+func filterAnyByPossibilities(values, possibilities []string) (filtered bool) {
+	if len(possibilities) == 0 {
+		return false
+	}
+
+	for _, value := range values {
+		if !filterByPossibilities(value, possibilities) {
+			return false // found a valid value
+		}
+	}
+
 	return true
 }

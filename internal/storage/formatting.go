@@ -22,7 +22,7 @@ func noServerFoundError(selection settings.ServerSelection) (err error) {
 	messageParts = append(messageParts, "VPN "+selection.VPN)
 
 	protocol := constants.UDP
-	if *selection.OpenVPN.TCP {
+	if selection.OpenVPN.Protocol == constants.TCP {
 		protocol = constants.TCP
 	}
 	messageParts = append(messageParts, "protocol "+protocol)
@@ -34,6 +34,16 @@ func noServerFoundError(selection settings.ServerSelection) (err error) {
 		messageParts = append(messageParts, part)
 	default:
 		part := "countries " + commaJoin(selection.Countries)
+		messageParts = append(messageParts, part)
+	}
+
+	switch len(selection.Categories) {
+	case 0:
+	case 1:
+		part := "category " + selection.Categories[0]
+		messageParts = append(messageParts, part)
+	default:
+		part := "categories " + commaJoin(selection.Categories)
 		messageParts = append(messageParts, part)
 	}
 

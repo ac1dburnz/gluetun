@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/qdm12/gluetun/internal/configuration/settings"
+	"github.com/qdm12/gluetun/internal/constants"
 	"github.com/qdm12/gluetun/internal/constants/providers"
 	"github.com/qdm12/gluetun/internal/constants/vpn"
 	"github.com/qdm12/gluetun/internal/models"
@@ -74,7 +75,15 @@ func filterServer(server models.Server,
 		return true
 	}
 
+	if *selection.PortForwardOnly && !server.PortForward {
+		return true
+	}
+
 	if filterByPossibilities(server.Country, selection.Countries) {
+		return true
+	}
+
+	if filterAnyByPossibilities(server.Categories, selection.Categories) {
 		return true
 	}
 
@@ -119,13 +128,27 @@ func filterByPossibilities[T string | uint16](value T, possibilities []T) (filte
 	return true
 }
 
+func filterAnyByPossibilities(values, possibilities []string) (filtered bool) {
+	if len(possibilities) == 0 {
+		return false
+	}
+
+	for _, value := range values {
+		if !filterByPossibilities(value, possibilities) {
+			return false // found a valid value
+		}
+	}
+
+	return true
+}
+
 func filterByProtocol(selection settings.ServerSelection,
 	serverTCP, serverUDP bool) (filtered bool) {
 	switch selection.VPN {
 	case vpn.Wireguard:
 		return !serverUDP
 	default: // OpenVPN
-		wantTCP := *selection.OpenVPN.TCP
+		wantTCP := selection.OpenVPN.Protocol == constants.TCP
 		wantUDP := !wantTCP
 		return (wantTCP && !serverTCP) || (wantUDP && !serverUDP)
 	}

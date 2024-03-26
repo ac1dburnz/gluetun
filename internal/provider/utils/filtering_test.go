@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/qdm12/gluetun/internal/configuration/settings"
+	"github.com/qdm12/gluetun/internal/constants"
 	"github.com/qdm12/gluetun/internal/constants/providers"
 	"github.com/qdm12/gluetun/internal/constants/vpn"
 	"github.com/qdm12/gluetun/internal/models"
@@ -50,7 +51,7 @@ func Test_FilterServers(t *testing.T) {
 		"filter by network protocol": {
 			selection: settings.ServerSelection{
 				OpenVPN: settings.OpenVPNSelection{
-					TCP: boolPtr(true),
+					Protocol: constants.TCP,
 				},
 			}.WithDefaults(providers.Ivpn),
 			servers: []models.Server{
@@ -127,6 +128,19 @@ func Test_FilterServers(t *testing.T) {
 				{Owned: true, VPN: vpn.OpenVPN, UDP: true},
 			},
 		},
+		"filter by port forwarding only": {
+			selection: settings.ServerSelection{
+				PortForwardOnly: boolPtr(true),
+			}.WithDefaults(providers.PrivateInternetAccess),
+			servers: []models.Server{
+				{PortForward: false, VPN: vpn.OpenVPN, UDP: true},
+				{PortForward: true, VPN: vpn.OpenVPN, UDP: true},
+				{PortForward: false, VPN: vpn.OpenVPN, UDP: true},
+			},
+			filtered: []models.Server{
+				{PortForward: true, VPN: vpn.OpenVPN, UDP: true},
+			},
+		},
 		"filter by country": {
 			selection: settings.ServerSelection{
 				Countries: []string{"b"},
@@ -164,6 +178,19 @@ func Test_FilterServers(t *testing.T) {
 			},
 			filtered: []models.Server{
 				{City: "b", VPN: vpn.OpenVPN, UDP: true},
+			},
+		},
+		"filter by category": {
+			selection: settings.ServerSelection{
+				Categories: []string{"legacy_p2p"},
+			}.WithDefaults(providers.Nordvpn),
+			servers: []models.Server{
+				{Categories: []string{"legacy_p2p"}, VPN: vpn.OpenVPN, UDP: true},
+				{Categories: []string{"legacy_standard"}, VPN: vpn.OpenVPN, UDP: true},
+				{VPN: vpn.OpenVPN, UDP: true},
+			},
+			filtered: []models.Server{
+				{Categories: []string{"legacy_p2p"}, VPN: vpn.OpenVPN, UDP: true},
 			},
 		},
 		"filter by ISP": {

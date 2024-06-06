@@ -53,7 +53,6 @@ type PortForwarder interface {
 
 type Storage interface {
 	FilterServers(provider string, selection settings.ServerSelection) (servers []models.Server, err error)
-	GetServerByName(provider, name string) (server models.Server, ok bool)
 }
 
 type NetLinker interface {
@@ -90,6 +89,6 @@ type DNSLoop interface {
 }
 
 type PublicIPLoop interface {
-	StartSingleRun()
+	RunOnce(ctx context.Context) (err error)
 	ClearData() (err error)
 }

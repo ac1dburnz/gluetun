@@ -279,9 +279,7 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
 		{name: "OpenVPN 2.5", getVersion: ovpnConf.Version25},
 		{name: "OpenVPN 2.6", getVersion: ovpnConf.Version26},
 		{name: "Unbound", getVersion: dnsConf.Version},
-		{name: "IPtables", getVersion: func(ctx context.Context) (version string, err error) {
-			return firewall.Version(ctx, cmder)
-		}},
+		{name: "IPtables", getVersion: firewallConf.Version},
 	})
 	if err != nil {
 		return err
@@ -343,11 +341,15 @@ func _main(ctx context.Context, buildInfo models.BuildInformation,
 	}
 
 	const tunDevice = "/dev/net/tun"
-	if err := tun.Check(tunDevice); err != nil {
+	err = tun.Check(tunDevice)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("checking TUN device: %w (see the Wiki errors/tun page)", err)
+		}
 		logger.Info(err.Error() + "; creating it...")
 		err = tun.Create(tunDevice)
 		if err != nil {
-			return err
+			return fmt.Errorf("creating tun device: %w", err)
 		}
 	}
 

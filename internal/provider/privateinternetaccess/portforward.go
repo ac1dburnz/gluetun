@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qdm12/gluetun/internal/constants/providers"
 	"github.com/qdm12/gluetun/internal/provider/utils"
 	"github.com/qdm12/golibs/format"
 )
@@ -37,17 +36,10 @@ func (p *Provider) PortForward(ctx context.Context,
 
 	serverName := objects.ServerName
 
-	server, ok := p.storage.GetServerByName(providers.PrivateInternetAccess, serverName)
-	if !ok {
-		return 0, fmt.Errorf("%w: %s", ErrServerNameNotFound, serverName)
-	}
-
 	logger := objects.Logger
 
-	if !server.PortForward {
-		logger.Error("The server " + serverName +
-			" (region " + server.Region + ") does not support port forwarding")
-		return 0, nil
+	if !objects.CanPortForward {
+		return 0, fmt.Errorf("%w: for server %s", ErrServerNameNotFound, serverName)
 	}
 
 	privateIPClient, err := newHTTPClient(serverName)
